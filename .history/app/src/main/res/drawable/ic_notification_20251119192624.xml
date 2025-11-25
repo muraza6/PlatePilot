@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simplified version of app launcher icon for notifications (white on transparent) -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M54,20C34.67,20 19,35.67 19,55C19,74.33 34.67,90 54,90C73.33,90 89,74.33 89,55C89,35.67 73.33,20 54,20ZM54,85C37.43,85 24,71.57 24,55C24,38.43 37.43,25 54,25C70.57,25 84,38.43 84,55C84,71.57 70.57,85 54,85Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M44,45C44,48.31 46.69,51 50,51C53.31,51 56,48.31 56,45C56,41.69 53.31,39 50,39C46.69,39 44,41.69 44,45Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M52,45C52,48.31 54.69,51 58,51C61.31,51 64,48.31 64,45C64,41.69 61.31,39 58,39C54.69,39 52,41.69 52,45Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M38,55C38,62.73 44.27,69 52,69L56,69C63.73,69 70,62.73 70,55L38,55Z"/>
+</vector>

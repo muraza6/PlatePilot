@@ -1,0 +1,27 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Ignore build artifacts
+*.apk
+*.aab
+
+# Large media files
+app/src/main/res/raw/splash_animation.mp4
+app/src/main/res/drawable/*.png
+Recipe_image/
+image/
+*.apk
+*.aab

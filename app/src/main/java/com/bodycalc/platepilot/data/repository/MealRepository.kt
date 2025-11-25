@@ -1,0 +1,460 @@
+package com.bodycalc.platepilot.data.repository
+
+import android.util.Log
+import com.bodycalc.platepilot.data.local.MealDao
+import com.bodycalc.platepilot.data.local.MealPlanDao
+import com.bodycalc.platepilot.data.local.UserProfileDao
+import com.bodycalc.platepilot.data.model.DailyMealPlan
+import com.bodycalc.platepilot.data.model.Meal
+import com.bodycalc.platepilot.data.model.MealPlan
+import com.bodycalc.platepilot.data.model.MealType
+import com.bodycalc.platepilot.data.model.UserProfile
+import com.bodycalc.platepilot.data.remote.GitHubMealService
+import com.bodycalc.platepilot.utils.GitHubImageManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import java.time.LocalDate
+
+class MealRepository(
+    private val mealDao: MealDao,
+    private val mealPlanDao: MealPlanDao,
+    private val userProfileDao: UserProfileDao
+) {
+    private val githubMealService = GitHubMealService()
+    
+    companion object {
+        private const val TAG = "MealRepository"
+    }
+    
+    // Meal operations
+    fun getAllMeals(): Flow<List<Meal>> = mealDao.getAllMeals()
+    
+    fun getMealsByType(type: MealType): Flow<List<Meal>> = mealDao.getMealsByType(type)
+    
+    suspend fun getMealById(id: Long): Meal? = mealDao.getMealById(id)
+    
+    suspend fun insertMeal(meal: Meal): Long = mealDao.insertMeal(meal)
+    
+    suspend fun insertMeals(meals: List<Meal>) = mealDao.insertMeals(meals)
+    
+    suspend fun updateMeal(meal: Meal) = mealDao.updateMeal(meal)
+    
+    suspend fun deleteMeal(meal: Meal) = mealDao.deleteMeal(meal)
+    
+    // Meal plan operations
+    fun getAllMealPlans(): Flow<List<MealPlan>> = mealPlanDao.getAllMealPlans()
+    
+    suspend fun getMealPlanByDate(date: String): MealPlan? = mealPlanDao.getMealPlanByDate(date)
+    
+    fun getMealPlanByDateFlow(date: String): Flow<MealPlan?> = mealPlanDao.getMealPlanByDateFlow(date)
+    
+    suspend fun insertMealPlan(mealPlan: MealPlan): Long = mealPlanDao.insertMealPlan(mealPlan)
+    
+    suspend fun updateMealPlan(mealPlan: MealPlan) = mealPlanDao.updateMealPlan(mealPlan)
+    
+    suspend fun deleteMealPlan(mealPlan: MealPlan) = mealPlanDao.deleteMealPlan(mealPlan)
+    
+    // User profile operations
+    fun getUserProfile(): Flow<UserProfile?> = userProfileDao.getUserProfile()
+    
+    suspend fun getUserProfileOnce(): UserProfile? = userProfileDao.getUserProfileOnce()
+    
+    suspend fun insertUserProfile(userProfile: UserProfile) = userProfileDao.insertUserProfile(userProfile)
+    
+    suspend fun updateUserProfile(userProfile: UserProfile) = userProfileDao.updateUserProfile(userProfile)
+    
+    // Regenerate meal plans based on dietary preference
+    suspend fun regenerateMealPlans() {
+        // Delete all existing meal plans
+        val allPlans = mealPlanDao.getAllMealPlans().first()
+        allPlans.forEach { plan ->
+            mealPlanDao.deleteMealPlan(plan)
+        }
+        
+        // Generate new plans based on current dietary preference
+        ensureSevenDayMealPlans()
+    }
+    
+    // Initialize sample data
+    suspend fun initializeSampleData() {
+        // Check if data already exists using first() to get immediate result
+        val existingMeals = mealDao.getAllMeals().first()
+        
+        // Only insert meals if database is empty
+        if (existingMeals.isEmpty()) {
+            val sampleMeals = listOf(
+            // Cloud meals from GitHub
+            Meal(
+                name = "Pancake Breakfast",
+                type = MealType.BREAKFAST,
+                description = "Fluffy pancakes with syrup and butter",
+                ingredients = "[\"Flour\", \"Eggs\", \"Milk\", \"Butter\", \"Maple syrup\", \"Berries\"]",
+                recipe = "1. Mix dry ingredients\n2. Add wet ingredients\n3. Cook on griddle\n4. Serve with syrup",
+                calories = 520,
+                protein = 14,
+                carbs = 78,
+                fats = 18,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("Pancake Breakfast_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("Pancake Breakfast_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegetarian"
+            ),
+            Meal(
+                name = "Avocado Toast Breakfast",
+                type = MealType.BREAKFAST,
+                description = "Healthy avocado toast with eggs",
+                ingredients = "[\"Whole grain bread\", \"Avocado\", \"Eggs\", \"Cherry tomatoes\", \"Olive oil\", \"Salt\", \"Pepper\"]",
+                recipe = "1. Toast bread\n2. Mash avocado\n3. Fry or poach eggs\n4. Assemble and season",
+                calories = 380,
+                protein = 16,
+                carbs = 32,
+                fats = 22,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("Avocado Toast Breakfast_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("Avocado Toast Breakfast_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegetarian"
+            ),
+            Meal(
+                name = "Acai Smoothie Bowl",
+                type = MealType.BREAKFAST,
+                description = "Refreshing acai bowl with toppings",
+                ingredients = "[\"Acai puree\", \"Banana\", \"Granola\", \"Berries\", \"Coconut flakes\", \"Honey\"]",
+                recipe = "1. Blend acai with banana\n2. Pour into bowl\n3. Add toppings\n4. Serve immediately",
+                calories = 420,
+                protein = 8,
+                carbs = 68,
+                fats = 14,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("Acai:Smoothie Bowl Breakfast_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("Acai:Smoothie Bowl Breakfast_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegan"
+            ),
+            Meal(
+                name = "Keto Breakfast",
+                type = MealType.BREAKFAST,
+                description = "Low-carb keto breakfast plate",
+                ingredients = "[\"Eggs\", \"Bacon\", \"Avocado\", \"Cheese\", \"Spinach\", \"Butter\"]",
+                recipe = "1. Cook bacon until crispy\n2. Scramble eggs with butter\n3. Serve with avocado and greens",
+                calories = 580,
+                protein = 32,
+                carbs = 8,
+                fats = 48,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("Keto Breakfast_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("Keto Breakfast_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Keto"
+            ),
+            
+            // Non-veg meals from GitHub
+            Meal(
+                name = "Chicken Tikka",
+                type = MealType.LUNCH,
+                description = "Spicy Indian chicken tikka with aromatic spices",
+                ingredients = "[\"Chicken\", \"Yogurt\", \"Garam masala\", \"Cumin\", \"Coriander\", \"Lemon\", \"Ginger\", \"Garlic\"]",
+                recipe = "1. Marinate chicken in yogurt and spices for 2 hours\n2. Skewer chicken pieces\n3. Grill until charred and cooked through\n4. Serve with lemon wedges",
+                calories = 450,
+                protein = 42,
+                carbs = 12,
+                fats = 25,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("chicken_tikka_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("chicken_tikka_detail.jpeg"),
+                isCloudImage = true,
+                dietaryCategory = "Non-Veg"
+            ),
+            Meal(
+                name = "Grilled Chicken Breast",
+                type = MealType.LUNCH,
+                description = "Perfectly grilled chicken breast with vegetables",
+                ingredients = "[\"Chicken breast\", \"Olive oil\", \"Garlic\", \"Herbs\", \"Vegetables\", \"Lemon\"]",
+                recipe = "1. Season chicken with herbs\n2. Grill until cooked through\n3. Serve with roasted vegetables",
+                calories = 420,
+                protein = 48,
+                carbs = 18,
+                fats = 16,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("Grilled Chicken Breast Meal_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("Grilled Chicken Breast Meal_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Non-Veg"
+            ),
+            Meal(
+                name = "Salmon & Quinoa",
+                type = MealType.DINNER,
+                description = "Grilled salmon with quinoa and vegetables",
+                ingredients = "[\"Salmon fillet\", \"Quinoa\", \"Broccoli\", \"Lemon\", \"Olive oil\", \"Garlic\"]",
+                recipe = "1. Cook quinoa\n2. Grill salmon\n3. Steam broccoli\n4. Combine and season",
+                calories = 520,
+                protein = 42,
+                carbs = 38,
+                fats = 22,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("Salmon & Quinoa Meal_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("Salmon & Quinoa Meal_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Non-Veg"
+            ),
+            Meal(
+                name = "Shrimp Tacos",
+                type = MealType.DINNER,
+                description = "Fresh shrimp tacos with cabbage slaw and lime crema",
+                ingredients = "[\"Shrimp\", \"Corn tortillas\", \"Cabbage\", \"Lime\", \"Cilantro\", \"Avocado\", \"Sour cream\", \"Chili powder\"]",
+                recipe = "1. Season and cook shrimp with chili powder\n2. Prepare cabbage slaw with lime\n3. Make lime crema\n4. Warm tortillas and assemble tacos",
+                calories = 520,
+                protein = 38,
+                carbs = 45,
+                fats = 22,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("Shrimp Tacos_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("Shrimp Tacos_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Non-Veg"
+            ),
+            
+            // Vegan meals from GitHub
+            Meal(
+                name = "Vegan Tofu Bowl",
+                type = MealType.LUNCH,
+                description = "Nutritious tofu bowl with vegetables and grains",
+                ingredients = "[\"Tofu\", \"Brown rice\", \"Kale\", \"Sweet potato\", \"Sesame oil\", \"Tahini sauce\"]",
+                recipe = "1. Bake tofu until crispy\n2. Cook rice\n3. Roast vegetables\n4. Assemble bowl with tahini",
+                calories = 460,
+                protein = 22,
+                carbs = 52,
+                fats = 18,
+                imageUrl = GitHubImageManager.getVeganImageUrl("Vegan Tofu Meal_card.png"),
+                detailImageUrl = GitHubImageManager.getVeganImageUrl("Vegan Tofu Meal_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegan"
+            ),
+            
+            // New Breakfast Meals from GitHub
+            Meal(
+                name = "Crepes",
+                type = MealType.BREAKFAST,
+                description = "Delicate French-style crepes with your choice of fillings",
+                ingredients = "[\"Flour\", \"Eggs\", \"Milk\", \"Butter\", \"Sugar\", \"Vanilla extract\"]",
+                recipe = "1. Mix batter ingredients\n2. Let rest for 30 minutes\n3. Cook on non-stick pan\n4. Fill with your preferred toppings",
+                calories = 350,
+                protein = 8,
+                carbs = 52,
+                fats = 12,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("Crepes_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("Crepes_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegetarian"
+            ),
+            Meal(
+                name = "French Toast",
+                type = MealType.BREAKFAST,
+                description = "Classic French toast with cinnamon and maple syrup",
+                ingredients = "[\"Bread\", \"Eggs\", \"Milk\", \"Cinnamon\", \"Vanilla\", \"Butter\", \"Maple syrup\"]",
+                recipe = "1. Whisk eggs with milk and cinnamon\n2. Dip bread slices\n3. Cook on buttered griddle\n4. Serve with maple syrup",
+                calories = 380,
+                protein = 12,
+                carbs = 48,
+                fats = 16,
+                imageUrl = GitHubImageManager.getBreakfastImageUrl("French_Toast_card.png"),
+                detailImageUrl = GitHubImageManager.getBreakfastImageUrl("French_Toast_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegetarian"
+            ),
+            
+            // New Non-Veg Meals from GitHub
+            Meal(
+                name = "Döner Kebab",
+                type = MealType.LUNCH,
+                description = "Tender marinated meat served in pita bread with fresh vegetables",
+                ingredients = "[\"Lamb or chicken\", \"Pita bread\", \"Tomatoes\", \"Lettuce\", \"Onions\", \"Yogurt sauce\", \"Garlic\"]",
+                recipe = "1. Marinate meat overnight\n2. Cook on vertical rotisserie or grill\n3. Warm pita bread\n4. Slice meat and serve with vegetables and sauce",
+                calories = 520,
+                protein = 32,
+                carbs = 45,
+                fats = 24,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("Do\u0308ner_Kebab_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("Do\u0308ner_Kebab_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Non-Veg"
+            ),
+            Meal(
+                name = "Fried Rice",
+                type = MealType.LUNCH,
+                description = "Aromatic fried rice with vegetables, egg, and your choice of protein",
+                ingredients = "[\"Cooked rice\", \"Eggs\", \"Carrots\", \"Peas\", \"Green beans\", \"Soy sauce\", \"Garlic\"]",
+                recipe = "1. Cook rice a day ahead\n2. Scramble eggs and remove\n3. Stir-fry vegetables\n4. Add rice and soy sauce, mix in eggs",
+                calories = 420,
+                protein = 15,
+                carbs = 52,
+                fats = 16,
+                imageUrl = GitHubImageManager.getNonVegImageUrl("Fried_rice_card.png"),
+                detailImageUrl = GitHubImageManager.getNonVegImageUrl("Fried_rice_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegetarian"
+            ),
+            
+            // New Vegan Meals from GitHub
+            Meal(
+                name = "Pasta",
+                type = MealType.DINNER,
+                description = "Delicious vegan pasta with fresh herbs and olive oil",
+                ingredients = "[\"Pasta\", \"Olive oil\", \"Garlic\", \"Fresh parsley\", \"Basil\", \"Tomatoes\", \"Mushrooms\"]",
+                recipe = "1. Cook pasta until al dente\n2. Sauté garlic and vegetables\n3. Toss pasta with oil and vegetables\n4. Garnish with fresh herbs",
+                calories = 420,
+                protein = 16,
+                carbs = 65,
+                fats = 12,
+                imageUrl = GitHubImageManager.getVeganImageUrl("Pasta_card.png"),
+                detailImageUrl = GitHubImageManager.getVeganImageUrl("Pasta_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegan"
+            ),
+            Meal(
+                name = "Spaghetti",
+                type = MealType.DINNER,
+                description = "Classic spaghetti with rich tomato sauce and fresh vegetables",
+                ingredients = "[\"Spaghetti\", \"Tomatoes\", \"Garlic\", \"Onions\", \"Olive oil\", \"Herbs\", \"Spinach\"]",
+                recipe = "1. Cook spaghetti\n2. Simmer tomato sauce with vegetables\n3. Combine pasta and sauce\n4. Top with fresh basil",
+                calories = 380,
+                protein = 14,
+                carbs = 62,
+                fats = 10,
+                imageUrl = GitHubImageManager.getVeganImageUrl("Sphageti_card.png"),
+                detailImageUrl = GitHubImageManager.getVeganImageUrl("Sphageti_detail.png"),
+                isCloudImage = true,
+                dietaryCategory = "Vegan"
+            )
+        )
+        
+            insertMeals(sampleMeals)
+        }
+        
+        // Always ensure 7 days of meal plans exist for the current week
+        ensureSevenDayMealPlans()
+    }
+    
+    /**
+     * ✅ FIXED: Ensures that meal plans exist for the next 7 days from today.
+     * Uses date-based seed for variety across days.
+     * Filters meals based on user's dietary preference.
+     */
+    private suspend fun ensureSevenDayMealPlans() {
+        val today = LocalDate.now()
+        
+        // Get user's dietary preference
+        val userProfile = getUserProfileOnce()
+        val dietaryPreference = userProfile?.dietaryPreferences ?: "None"
+        
+        // Get all meals from database
+        val allMeals = mealDao.getAllMeals().first()
+        
+        // Filter meals based on dietary preference
+        val filteredMeals = if (dietaryPreference == "None" || dietaryPreference.isEmpty()) {
+            allMeals
+        } else {
+            allMeals.filter { meal ->
+                meal.dietaryCategory == dietaryPreference ||
+                (dietaryPreference == "Vegetarian" && meal.dietaryCategory == "Vegan") ||
+                (dietaryPreference == "Gluten-Free" && meal.dietaryCategory == "Gluten-Free")
+            }
+        }
+        
+        // Separate filtered meals by type
+        val breakfastMeals = filteredMeals.filter { it.type == MealType.BREAKFAST }
+        val lunchMeals = filteredMeals.filter { it.type == MealType.LUNCH }
+        val dinnerMeals = filteredMeals.filter { it.type == MealType.DINNER }
+        val snackMeals = filteredMeals.filter { it.type == MealType.SNACK }
+        
+        // ✅ FIX: Use date-based seed for different meals each day
+        for (dayOffset in 0..6) {
+            val date = today.plusDays(dayOffset.toLong())
+            val dateString = date.toString()
+            val existingPlan = getMealPlanByDate(dateString)
+            
+            // Use date's epoch day as seed for consistent but varied selection
+            val dateSeed = date.toEpochDay()
+            
+            // Select meals using date-based randomization
+            val breakfastId = if (breakfastMeals.isNotEmpty()) {
+                val index = (dateSeed % breakfastMeals.size).toInt().let { 
+                    if (it < 0) it + breakfastMeals.size else it 
+                }
+                breakfastMeals[index].id
+            } else null
+            
+            val lunchId = if (lunchMeals.isNotEmpty()) {
+                val index = ((dateSeed + 1) % lunchMeals.size).toInt().let { 
+                    if (it < 0) it + lunchMeals.size else it 
+                }
+                lunchMeals[index].id
+            } else null
+            
+            val dinnerId = if (dinnerMeals.isNotEmpty()) {
+                val index = ((dateSeed + 2) % dinnerMeals.size).toInt().let { 
+                    if (it < 0) it + dinnerMeals.size else it 
+                }
+                dinnerMeals[index].id
+            } else null
+            
+            val snackId = if (snackMeals.isNotEmpty()) {
+                val index = ((dateSeed + 3) % snackMeals.size).toInt().let { 
+                    if (it < 0) it + snackMeals.size else it 
+                }
+                snackMeals[index].id
+            } else null
+            
+            Log.d(TAG, "Creating plan for $dateString (seed=$dateSeed): Breakfast=$breakfastId, Lunch=$lunchId, Dinner=$dinnerId")
+            
+            val mealPlan = MealPlan(
+                date = dateString,
+                breakfastId = breakfastId,
+                lunchId = lunchId,
+                lunch2Id = snackId,
+                dinnerId = dinnerId
+            )
+            
+            if (existingPlan == null) {
+                insertMealPlan(mealPlan)
+            } else {
+                updateMealPlan(mealPlan.copy(id = existingPlan.id))
+            }
+        }
+    }
+    
+    /**
+     * Sync meals from GitHub repository
+     * @param githubUrl The raw GitHub content URL for meals.json
+     * Example: https://raw.githubusercontent.com/username/repo/main/meals.json
+     * @return Result indicating success or failure with error message
+     */
+    suspend fun syncMealsFromGitHub(githubUrl: String): Result<String> {
+        return try {
+            Log.d(TAG, "Starting meal sync from GitHub: $githubUrl")
+            var syncResult: Result<String>? = null
+            githubMealService.getMealsFromGitHub(githubUrl).collect { result ->
+                if (result.isSuccess) {
+                    val githubMeals = result.getOrNull()
+                    Log.d(TAG, "GitHub meals fetch result: ${githubMeals?.size ?: 0} meals")
+                    if (!githubMeals.isNullOrEmpty()) {
+                        Log.d(TAG, "Deleting all existing meals from local database before insert.")
+                        mealDao.deleteAllMeals()
+                        Log.d(TAG, "Inserting meals fetched from GitHub into local database.")
+                        insertMeals(githubMeals)
+                        Log.d(TAG, "Inserted meals: ${githubMeals.map { it.name }}")
+                        ensureSevenDayMealPlans()
+                        Log.d(TAG, "Successfully synced ${githubMeals.size} meals from GitHub and regenerated meal plans.")
+                        syncResult = Result.success("Synced ${githubMeals.size} meals successfully")
+                    } else {
+                        Log.w(TAG, "No meals found in GitHub response. Meals list is empty or null.")
+                        syncResult = Result.failure(Exception("No meals found in GitHub repository"))
+                    }
+                } else {
+                    val error = result.exceptionOrNull()?.message ?: "Unknown error"
+                    Log.e(TAG, "Failed to fetch meals from GitHub: $error")
+                    syncResult = Result.failure(Exception(error))
+                }
+            }
+            syncResult ?: Result.failure(Exception("No response from GitHub"))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during GitHub sync", e)
+            Result.failure(e)
+        }
+    }
+}
